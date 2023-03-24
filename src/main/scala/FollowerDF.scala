@@ -1,5 +1,6 @@
 import org.apache.spark.sql.SparkSession
-
+import org.apache.spark.sql.types.{StructType, StringType}
+import org.apache.spark.sql.functions.{col}
 object FollowerDF {
 
   /**
@@ -28,7 +29,9 @@ object FollowerDF {
 
     val inputGraph = args(0)
     val followerDFOutputPath = args(1)
-
+    val schema = new StructType().add("follower", StringType).add("followee", StringType)
+    val graphDF = spark.read.schema(schema).option("sep", "\t").csv(inputGraph)
+    graphDF.groupBy("followee").count().sort(col("count").desc).limit(100).write.parquet(followerDFOutputPath)
     computeFollowerCountDF(inputGraph, followerDFOutputPath, spark)
   }
 

@@ -31,8 +31,12 @@ object VerticesEdgesCounts {
     // TODO: copy your code from the notebook here.
     // TODO: replace with the actual values. You should not hardcode them as the grader tests the
     //  function on a secret dataset.
-    val edges = 0L
-    val vertices = 0L
+    val graphRDD = sc.textFile(inputPath)
+    val follower_followee_rows = graphRDD.flatMap((value) => value.split("\n")).distinct
+    val users = follower_followee_rows.flatMap((row) => row.split("\t")).distinct
+
+    val edges = follower_followee_rows.count()
+    val vertices = users.count()
 
     countsToString(vertices, edges)
   }
