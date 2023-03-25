@@ -3,7 +3,7 @@ import java.io.File
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterEach, FunSpec, MustMatchers}
 
-class PageRankTest
+abstract class PageRankTest
   extends FunSpec
   with TestingUtil
   with MustMatchers

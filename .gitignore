@@ -2,3 +2,6 @@ spark.logs
 target/
 
 submitter-task1
+page-rank/.venv/**
+
+.vscode

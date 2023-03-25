@@ -12,7 +12,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <project.root>${project.basedir}</project.root>
     <scala.binary.version>2.12</scala.binary.version>
-    <scala.version>2.12.0</scala.version>
+    <scala.version>2.13.10</scala.version>
     <spark.version>3.0.0</spark.version>
     <spark.scope>provided</spark.scope>
     <scala.test.version>3.0.8</scala.test.version>

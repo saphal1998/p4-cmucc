@@ -17,8 +17,9 @@ object FollowerDF {
     * @param spark the spark session.
     */
   def computeFollowerCountDF(inputPath: String, outputPath: String, spark: SparkSession): Unit = {
-    // TODO: Calculate the follower count for each user
-    // TODO: Write the top 100 users to the above outputPath in parquet format
+    val schema = new StructType().add("follower", StringType).add("followee", StringType)
+    val graphDF = spark.read.schema(schema).option("sep", "\t").csv(inputPath)
+    graphDF.groupBy("followee").count().sort(col("count").desc).limit(100).write.parquet(outputPath)
   }
 
   /**
@@ -29,9 +30,6 @@ object FollowerDF {
 
     val inputGraph = args(0)
     val followerDFOutputPath = args(1)
-    val schema = new StructType().add("follower", StringType).add("followee", StringType)
-    val graphDF = spark.read.schema(schema).option("sep", "\t").csv(inputGraph)
-    graphDF.groupBy("followee").count().sort(col("count").desc).limit(100).write.parquet(followerDFOutputPath)
     computeFollowerCountDF(inputGraph, followerDFOutputPath, spark)
   }
 

@@ -33,6 +33,7 @@ object VerticesEdgesCounts {
     //  function on a secret dataset.
     val graphRDD = sc.textFile(inputPath)
     val follower_followee_rows = graphRDD.flatMap((value) => value.split("\n")).distinct
+    follower_followee_rows.cache()
     val users = follower_followee_rows.flatMap((row) => row.split("\t")).distinct
 
     val edges = follower_followee_rows.count()
