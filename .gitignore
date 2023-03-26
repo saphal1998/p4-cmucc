@@ -2,6 +2,7 @@ spark.logs
 target/
 
 submitter-task1
+submitter-task2
 page-rank/.venv/**
 
 .vscode
