@@ -31,88 +31,52 @@ object PageRank {
     *
     * @param inputGraphPath path of the input graph.
     * @param outputPath path of the output of page rank.
-    * @param iterations number of iterations to run on the PageRank.
+    * @param iterations number of iterations to run on the PageRank
+    * @param numberOfVertices Number of vertices, this was determined in the previous exercise.
     * @param spark the SparkSession.
     */
   def calculatePageRank(
       inputGraphPath: String,
       outputPath: String,
       iterations: Int,
+      numberOfVertices: Int,
       spark: SparkSession): Unit = {
-    val sc = spark.sparkContext
+    val graphRDD = spark.sparkContext.textFile(inputGraphPath).flatMap((value) => value.split("\n")).distinct.map((row) => {
+        val splits = row.split("\t")
+        (splits(0).toLong, splits(1).toLong)
+    })
 
-    val schema = new StructType().add("follower", StringType).add("followee", StringType)
-    val graphDF = spark.read.schema(schema).option("sep", "\t").csv(inputGraphPath)
-    val users = get_users(graphDF)
-    val user_count = sc.broadcast(1006458)
+    val users = graphRDD.flatMap{case (a,b) => List(a,b) }
 
-    val rank = initialize_ranks(users, user_count)
+    val followers = graphRDD.aggregateByKey(List[Long]())(seqOp, combOp).cache()
+    val followees = graphRDD.map{case(k,v) => (v,k)}.aggregateByKey(List[Long]())(seqOp, combOp).cache()
 
-    val followers = get_followers_per_user(graphDF)
-    val following = get_following_per_user(graphDF)
+    val sourceUsers = users.subtract(followees.keys)
+    val numVertices = 1006458
 
-    var enhanced_rank = rank.join(followers, col("followers.followee") === col("rank.user_id"), "left").select(col("user_id").as("user_id"), col("rank_value"), col("followers")).as("rank_followers").join(following, col("following.follower") === col("rank_followers.user_id"), "left").select(col("user_id"), col("rank_value"), col("followers"), col("following")).as("rank_followers_following").as("rank").cache()
+    var ranks = followers.mapValues(v => 1.0 / numVertices)
+    var iterations = 10
 
-    val contributions = get_contributions(enhanced_rank)
+    for (i <- 1 to iterations) {
+      var contribs = followers.join(ranks).values.flatMap { case (followees, rank) =>
+        val size = followees.size
+        followees.map(followee => (followee, rank / size))
+      }
 
-    val summed_contributions = explode_and_sum_contributions(contributions)
-    val total_dangling_bonus = summed_contributions.select("contributions").where(col("contribute_to").isNull).first.getDouble(0)
-    val new_ranks = calculate_rank(contributions, summed_contributions, user_count)
+      val danglingContribs = (1 - contribs.values.reduce(_ + _)) / numVertices
+      contribs = contribs.reduceByKey(_ + _).mapValues(x => 0.15 / numVertices + 0.85 * (x + danglingContribs))
 
-    var number_of_iterations = 0
-    while(number_of_iterations < iterations) {
-        val contributions = get_contributions(enhanced_rank)
-        val summed_contributions = explode_and_sum_contributions(contributions)
-        val total_dangling_bonus = summed_contributions.select("contributions").where(col("contribute_to").isNull).first.getDouble(0)
-        
-        val new_ranks = calculate_rank(contributions, summed_contributions, user_count)
-        enhanced_rank = new_ranks
-        number_of_iterations += 1
+      val sourceContribs = sourceUsers.map(x => (x, 0.15 / numVertices + 0.85 * (0 + danglingContribs)))
+
+      ranks = contribs.union(sourceContribs)
     }
-  
-    enhanced_rank.write.parquet(outputPath)
 
+    ranks.map(row => row._1.toString + "\t" + row._2.toString).saveAsTextFile(outputPath)
   }
 
-  def calculate_rank(contributions: DataFrame, summed_contributions: DataFrame, user_count: Broadcast[Long]) = {
-    val new_ranks_without_dangling = contributions
-        .drop("contributions").join(summed_contributions, col("contribute_to") === col("user_id"), "left")
-        .withColumn("contributions", when(col("contributions").isNotNull, col("contributions")).otherwise(lit(0)))
-        .select(col("user_id"), col("followers"), col("rank_value"), col("following"), col("contributions").as("rank_contributions"))
-        .crossJoin(summed_contributions.filter(col("contribute_to").isNull).select(col("contributions").as("remainder")))
-        .withColumn("rank_value", (col("remainder")/ user_count.value) + col("rank_contributions"))
-        .drop("rank_contributions", "remainder")
-    new_ranks_without_dangling.withColumn("rank_value", (col("rank_value") * 0.85) + (0.15 / user_count.value))
-  }
+  def seqOp = (accumulator: List[Long], element: Long) => accumulator:+element
 
-  def explode_and_sum_contributions(contributions: DataFrame) = {
-      val exploded_contribution = contributions.select(col("user_id"),col("rank_value"), col("followers"), explode(col("following")).as("contribute_to"), col("contributions")).as("exploded_contributions")
-      exploded_contribution.groupBy("contribute_to").agg(sum("contributions").alias("contributions")).as("summed_contributions")
-  }
-
-  def get_contributions(rank: DataFrame) = {
-      rank.withColumn("contributions", col("rank_value") / when(col("following").isNotNull, size(col("following"))).otherwise(1))
-  }
-
-  def get_users(graphDF: DataFrame) = {
-      graphDF.select(col("followee"))
-          .union(graphDF.select(col("follower")))
-          .withColumnRenamed("followee","user_id").distinct.as("users")
-  }
-
-  def initialize_ranks(users: DataFrame, user_count: Broadcast[Int]) = {
-      users.select(col("user_id"), lit(1.0/user_count.value).as("rank_value")).as("rank")
-  }
-
-  def get_followers_per_user(social_graph: DataFrame) = {
-      social_graph.groupBy("followee").agg(collect_list("follower").as("followers")).as("followers")
-  }
-
-  def get_following_per_user(social_graph: DataFrame) = {
-      social_graph.groupBy("follower").agg(collect_list("followee").as("following")).as("following")
-  }
-
-
+  def combOp = (accumulator1: List[Long], accumulator2: List[Long]) => accumulator1 ++ accumulator2
   /**
     * @param args it should be called with two arguments, the input path, and the output path.
     */
@@ -122,6 +86,6 @@ object PageRank {
     val inputGraph = args(0)
     val pageRankOutputPath = args(1)
 
-    calculatePageRank(inputGraph, pageRankOutputPath, PageRankIterations, spark)
+    calculatePageRank(inputGraph, pageRankOutputPath, PageRankIterations, 101006458, spark)
   }
 }

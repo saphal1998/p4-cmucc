@@ -26,7 +26,7 @@ abstract class PageRankTest
 
   describe("the PageRank algorithm") {
     it("should match the expected output for SmallGraph1") {
-      PageRank.calculatePageRank(InputGraphPath, OutputGraphPath, Iterations, spark)
+      PageRank.calculatePageRank(InputGraphPath, OutputGraphPath, Iterations, 4, spark)
       comparePageRanks(OutputGraphPath, ReferencePath)
     }
   }

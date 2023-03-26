@@ -14,8 +14,6 @@ object FollowerRDD {
     * @param sc the SparkContext.
     */
   def computeFollowerCountRDD(inputPath: String, outputPath: String, sc: SparkContext): Unit = {
-    // TODO: Calculate the follower count for each user	
-    // TODO: Write the top 100 users to the outputPath with userID and count **tab separated**
     val graphRDD = sc.textFile(inputPath)
     val follower_followee_rows = graphRDD.flatMap((value) => value.split("\n")).distinct
     follower_followee_rows.cache()
