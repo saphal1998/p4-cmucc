@@ -57,7 +57,7 @@ object PageRank {
 
     val summed_contributions = explode_and_sum_contributions(contributions)
     val total_dangling_bonus = summed_contributions.select("contributions").where(col("contribute_to").isNull).first.getDouble(0)
-    val new_ranks = calculate_rank(contributions, summed_contributions, total_dangling_bonus, user_count)
+    val new_ranks = calculate_rank(contributions, summed_contributions, user_count)
 
     var number_of_iterations = 0
     while(number_of_iterations < iterations) {
@@ -65,7 +65,7 @@ object PageRank {
         val summed_contributions = explode_and_sum_contributions(contributions)
         val total_dangling_bonus = summed_contributions.select("contributions").where(col("contribute_to").isNull).first.getDouble(0)
         
-        val new_ranks = calculate_rank(contributions, summed_contributions, total_dangling_bonus, user_count)
+        val new_ranks = calculate_rank(contributions, summed_contributions, user_count)
         enhanced_rank = new_ranks
         number_of_iterations += 1
     }
@@ -74,25 +74,25 @@ object PageRank {
 
   }
 
-  def calculate_rank(contributions: DataFrame, summed_contributions: DataFrame, total_dangling_bonus: Double, user_count: Broadcast[Int]) = {
+  def calculate_rank(contributions: DataFrame, summed_contributions: DataFrame, user_count: Broadcast[Long]) = {
     val new_ranks_without_dangling = contributions
         .drop("contributions").join(summed_contributions, col("contribute_to") === col("user_id"), "left")
-        .drop("contribute_to", "rank_value")
-        .withColumnRenamed("contributions", "rank_value")
-    new_ranks_without_dangling
-        .withColumn("rank_value", col("rank_value") + (total_dangling_bonus/user_count.value))
-        .withColumn("rank_value", (col("rank_value") * 0.85) + (0.15 / user_count.value))
+        .withColumn("contributions", when(col("contributions").isNotNull, col("contributions")).otherwise(lit(0)))
+        .select(col("user_id"), col("followers"), col("rank_value"), col("following"), col("contributions").as("rank_contributions"))
+        .crossJoin(summed_contributions.filter(col("contribute_to").isNull).select(col("contributions").as("remainder")))
+        .withColumn("rank_value", (col("remainder")/ user_count.value) + col("rank_contributions"))
+        .drop("rank_contributions", "remainder")
+    new_ranks_without_dangling.withColumn("rank_value", (col("rank_value") * 0.85) + (0.15 / user_count.value))
   }
 
   def explode_and_sum_contributions(contributions: DataFrame) = {
-      val exploded_contribution = contributions.select(col("user_id"),col("rank_value"), col("followers"), explode_outer(col("following")).as("contribute_to"), col("contributions")).as("exploded_contributions")
-    exploded_contribution.groupBy("contribute_to").agg(sum("contributions").alias("contributions")).as("summed_contributions")
+      val exploded_contribution = contributions.select(col("user_id"),col("rank_value"), col("followers"), explode(col("following")).as("contribute_to"), col("contributions")).as("exploded_contributions")
+      exploded_contribution.groupBy("contribute_to").agg(sum("contributions").alias("contributions")).as("summed_contributions")
   }
 
   def get_contributions(rank: DataFrame) = {
-    rank.withColumn("contributions", col("rank_value") / when(col("following").isNotNull, size(col("following"))).otherwise(1))
+      rank.withColumn("contributions", col("rank_value") / when(col("following").isNotNull, size(col("following"))).otherwise(1))
   }
-
 
   def get_users(graphDF: DataFrame) = {
       graphDF.select(col("followee"))
