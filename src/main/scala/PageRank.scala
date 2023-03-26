@@ -1,4 +1,9 @@
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.{StructType, StructField, StringType}
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions.{collect_list, when, size, explode_outer, sum}
 
 object PageRank {
 
@@ -37,11 +42,11 @@ object PageRank {
     val sc = spark.sparkContext
 
     val schema = new StructType().add("follower", StringType).add("followee", StringType)
-    val graphDF = spark.read.schema(schema).option("sep", "\t").csv(inputPath)
+    val graphDF = spark.read.schema(schema).option("sep", "\t").csv(inputGraphPath)
     val users = get_users(graphDF)
     val user_count = sc.broadcast(1006458)
 
-    val rank = initialize_ranks(users)
+    val rank = initialize_ranks(users, user_count)
 
     val followers = get_followers_per_user(graphDF)
     val following = get_following_per_user(graphDF)
@@ -52,7 +57,7 @@ object PageRank {
 
     val summed_contributions = explode_and_sum_contributions(contributions)
     val total_dangling_bonus = summed_contributions.select("contributions").where(col("contribute_to").isNull).first.getDouble(0)
-    val new_ranks = calculate_rank(contributions, total_dangling_bonus)
+    val new_ranks = calculate_rank(contributions, summed_contributions, total_dangling_bonus, user_count)
 
     var number_of_iterations = 0
     while(number_of_iterations < iterations) {
@@ -60,7 +65,7 @@ object PageRank {
         val summed_contributions = explode_and_sum_contributions(contributions)
         val total_dangling_bonus = summed_contributions.select("contributions").where(col("contribute_to").isNull).first.getDouble(0)
         
-        val new_ranks = calculate_rank(contributions, total_dangling_bonus)
+        val new_ranks = calculate_rank(contributions, summed_contributions, total_dangling_bonus, user_count)
         enhanced_rank = new_ranks
         number_of_iterations += 1
     }
@@ -69,7 +74,7 @@ object PageRank {
 
   }
 
-  def calculate_rank(contributions: DataFrame, total_dangling_bonus: Double) = {
+  def calculate_rank(contributions: DataFrame, summed_contributions: DataFrame, total_dangling_bonus: Double, user_count: Broadcast[Int]) = {
     val new_ranks_without_dangling = contributions
         .drop("contributions").join(summed_contributions, col("contribute_to") === col("user_id"), "left")
         .drop("contribute_to", "rank_value")
@@ -95,7 +100,7 @@ object PageRank {
           .withColumnRenamed("followee","user_id").distinct.as("users")
   }
 
-  def initialize_ranks(users: DataFrame) = {
+  def initialize_ranks(users: DataFrame, user_count: Broadcast[Int]) = {
       users.select(col("user_id"), lit(1.0/user_count.value).as("rank_value")).as("rank")
   }
 
