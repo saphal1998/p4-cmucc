@@ -76,7 +76,7 @@ object PageRank {
 
   def seqOp = (accumulator: List[Long], element: Long) => accumulator:+element
 
-  def combOp = (accumulator1: List[Long], accumulator2: List[Long]) => accumulator1 ++ accumulator2
+  def combOp = (accumulator1: List[Long], accumulator2: List[Long]) => accumulator1 ::: accumulator2
   /**
     * @param args it should be called with two arguments, the input path, and the output path.
     */
