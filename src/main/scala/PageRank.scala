@@ -66,9 +66,11 @@ object PageRank {
       val danglingContribs = (1 - contribs.values.reduce(_ + _)) / numVertices
       contribs = contribs.reduceByKey(_ + _).mapValues(x => 0.15 / numVertices + 0.85 * (x + danglingContribs))
 
-      val sourceContribs = sourceUsers.map(x => (x, 0.15 / numVertices + 0.85 * (0 + danglingContribs)))
+      // They lost all of their original contribs
+      val regularContribs = sourceUsers.map(x => (x, 0.15 / numVertices + 0.85 * (0 + danglingContribs)))
 
-      ranks = contribs.union(sourceContribs)
+      // Flatten for rank
+      ranks = contribs.union(regularContribs)
     }
 
     ranks.map(row => row._1.toString + "\t" + row._2.toString).saveAsTextFile(outputPath)
