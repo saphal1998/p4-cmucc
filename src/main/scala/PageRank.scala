@@ -41,10 +41,10 @@ object PageRank {
       iterations: Int,
       numberOfVertices: Int,
       spark: SparkSession): Unit = {
-    val graphRDD = spark.sparkContext.textFile(inputGraphPath).flatMap((value) => value.split("\n")).distinct.map((row) => {
+    val graphRDD = spark.sparkContext.textFile(inputGraphPath).flatMap((value) => value.split("\n")).map((row) => {
         val splits = row.split("\t")
         (splits(0).toLong, splits(1).toLong)
-    })
+    }).distinct
 
     val users = graphRDD.flatMap{case (a,b) => List(a,b) }
 
@@ -52,7 +52,7 @@ object PageRank {
     val followees = graphRDD.map{case(k,v) => (v,k)}.aggregateByKey(List[Long]())(seqOp, combOp).cache()
 
     val sourceUsers = users.subtract(followees.keys)
-    val numVertices = 1006458
+    val numVertices = numberOfVertices
 
     // Prepare data with initial ranks, var used for mutablility
     var ranks = followers.mapValues(v => 1.0 / numVertices)
