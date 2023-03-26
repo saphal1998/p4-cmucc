@@ -54,6 +54,7 @@ object PageRank {
     val sourceUsers = users.subtract(followees.keys)
     val numVertices = 1006458
 
+    // Prepare data with initial ranks, var used for mutablility
     var ranks = followers.mapValues(v => 1.0 / numVertices)
     var iterations = 10
 
