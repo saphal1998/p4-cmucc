@@ -41,7 +41,7 @@ object PageRank {
       iterations: Int,
       numberOfVertices: Int,
       spark: SparkSession): Unit = {
-    val graphRDD = spark.sparkContext.textFile(inputGraphPath).flatMap((value) => value.split("\n")).map((row) => {
+    val graphRDD = spark.sparkContext.textFile(inputGraphPath).map((row) => {
         val splits = row.split("\t")
         (splits(0).toLong, splits(1).toLong)
     }).cache()
