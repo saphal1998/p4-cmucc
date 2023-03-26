@@ -44,7 +44,7 @@ object PageRank {
     val graphRDD = spark.sparkContext.textFile(inputGraphPath).flatMap((value) => value.split("\n")).map((row) => {
         val splits = row.split("\t")
         (splits(0).toLong, splits(1).toLong)
-    }).distinct
+    })
 
     val users = graphRDD.flatMap{case (a,b) => List(a,b) }
 
