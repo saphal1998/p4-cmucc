@@ -3,7 +3,6 @@ import org.apache.spark.sql.types.{StructType, StructField, StringType}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.{collect_list, when, size, explode_outer, sum}
 
 object PageRank {
 
@@ -45,14 +44,17 @@ object PageRank {
     val graphRDD = spark.sparkContext.textFile(inputGraphPath).map((row) => {
         val splits = row.split("\t")
         (splits(0).toLong, splits(1).toLong)
-    }).cache()
+    })
 
-    val users = graphRDD.flatMap{case (a,b) => List(a,b) }
+    val users = graphRDD.flatMap{case (a,b) => Array(a,b) }.distinct
 
-    val followers = graphRDD.aggregateByKey(List[Long]())(seqOp, combOp).distinct.cache()
-    val followees = graphRDD.map{case(k,v) => (v,k)}.aggregateByKey(List[Long]())(seqOp, combOp).distinct.cache()
+    val followers = graphRDD.aggregateByKey(Array[Long]())(seqOp, combOp).cache()
+    
+    // Users who have atleast one follower
+    val followed_users = followers.flatMap {case(_, v) => v}.distinct
 
-    val sourceUsers = users.subtract(followees.keys)
+    val sourceUsers = users.subtract(followed_users)
+
     val numVertices = numberOfVertices
 
     // Prepare data with initial ranks, var used for mutablility
@@ -60,16 +62,16 @@ object PageRank {
     var iterations = PageRankIterations
 
     for (i <- 1 to iterations) {
-      var contribs = followers.join(ranks).values.flatMap { case (followees, rank) =>
+      var contribs = followers.join(ranks, followers.partitioner.get).values.flatMap { case (followees, rank) =>
         val size = followees.size
         followees.map(followee => (followee, rank / size))
       }
 
-      val danglingContribs = (1 - contribs.values.reduce(_ + _)) / numVertices
-      contribs = contribs.reduceByKey(_ + _).mapValues(x => 0.15 / numVertices + 0.85 * (x + danglingContribs))
+      val remainingWeight = (1 - contribs.values.reduce(_ + _)) / numVertices
+      contribs = contribs.reduceByKey(_ + _).mapValues(x => 0.15 / numVertices + 0.85 * (x + remainingWeight))
 
       // They lost all of their original contribs
-      val regularContribs = sourceUsers.map(x => (x, 0.15 / numVertices + 0.85 * (0 + danglingContribs)))
+      val regularContribs = sourceUsers.map(x => (x, 0.15 / numVertices + 0.85 * (0 + remainingWeight)))
 
       // Flatten for rank
       ranks = contribs.union(regularContribs)
@@ -78,9 +80,9 @@ object PageRank {
     ranks.map(row => row._1.toString + "\t" + row._2.toString).saveAsTextFile(outputPath)
   }
 
-  def seqOp = (accumulator: List[Long], element: Long) => accumulator:+element
+  def seqOp = (accumulator: Array[Long], element: Long) => accumulator:+element
 
-  def combOp = (accumulator1: List[Long], accumulator2: List[Long]) => accumulator1 ::: accumulator2
+  def combOp = (accumulator1: Array[Long], accumulator2: Array[Long]) => accumulator1 ++ accumulator2
   /**
     * @param args it should be called with two arguments, the input path, and the output path.
     */
