@@ -91,6 +91,6 @@ object PageRank {
     val inputGraph = args(0)
     val pageRankOutputPath = args(1)
 
-    calculatePageRank(inputGraph, pageRankOutputPath, PageRankIterations, 101006458, spark)
+    calculatePageRank(inputGraph, pageRankOutputPath, PageRankIterations, 1006458, spark)
   }
 }
