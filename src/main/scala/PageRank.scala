@@ -59,7 +59,6 @@ object PageRank {
 
     // Prepare data with initial ranks, var used for mutablility
     var ranks = followers.mapValues(v => 1.0 / numVertices)
-    var iterations = PageRankIterations
 
     for (i <- 1 to iterations) {
       var contribs = followers.join(ranks, followers.partitioner.get).values.flatMap { case (followees, rank) =>

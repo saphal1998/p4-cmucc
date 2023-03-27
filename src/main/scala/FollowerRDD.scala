@@ -16,7 +16,6 @@ object FollowerRDD {
   def computeFollowerCountRDD(inputPath: String, outputPath: String, sc: SparkContext): Unit = {
     val graphRDD = sc.textFile(inputPath)
     val follower_followee_rows = graphRDD.flatMap((value) => value.split("\n")).distinct
-    follower_followee_rows.cache()
     val follower_followee = follower_followee_rows.map((row) => row.split("\t")).map((row) => (row(1), 1))
     val follower_count = follower_followee.reduceByKey((value1, value2) => value1 + value2).sortBy(-_._2)
     val top100RDD = sc.parallelize(follower_count.take(100)).map(row => row._1.toString + "\t" + row._2.toString)

@@ -18,7 +18,7 @@ object FollowerDF {
     */
   def computeFollowerCountDF(inputPath: String, outputPath: String, spark: SparkSession): Unit = {
     val schema = new StructType().add("follower", StringType).add("followee", StringType)
-    val graphDF = spark.read.schema(schema).option("sep", "\t").csv(inputPath)
+    val graphDF = spark.read.schema(schema).option("sep", "\t").csv(inputPath).distinct
     graphDF.groupBy("followee").count().sort(col("count").desc).limit(100).write.parquet(outputPath)
   }
 
